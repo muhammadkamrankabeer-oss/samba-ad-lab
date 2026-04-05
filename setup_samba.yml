@@ -1,0 +1,45 @@
+---
+- name: Automate Samba File Server
+  hosts: all
+  become: yes
+  vars:
+    share_path: "/srv/samba/shared"
+    samba_user: "ubuntu"
+    samba_password: "ubuntu"
+
+  tasks:
+    - name: 1. Install Samba packages
+      apt:
+        name: [samba, samba-common, smbclient]
+        state: present
+        update_cache: yes
+
+    - name: 2. Create the shared directory
+      file:
+        path: "{{ share_path }}"
+        state: directory
+        owner: "{{ samba_user }}"
+        group: "{{ samba_user }}"
+        mode: '0775'
+
+    - name: 3. Configure smb.conf (The "Code" version)
+      blockinfile:
+        path: /etc/samba/smb.conf
+        block: |
+          [DebianShare]
+             comment = Samba File Server
+             path = {{ share_path }}
+             browseable = yes
+             read only = no
+             guest ok = no
+             valid users = {{ samba_user }}
+
+    - name: 4. Set Samba password for user (Automated)
+      shell: "printf '{{ samba_password }}\n{{ samba_password }}\n' | smbpasswd -s -a {{ samba_user }}"
+      register: smb_user_result
+      changed_when: "'Added user' in smb_user_result.stdout"
+
+    - name: 5. Restart Samba Service
+      systemd:
+        name: smbd
+        state: restarted
